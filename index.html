@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>五子棋建议</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#17263a;background:#edf1f5;font-size:14px}*{box-sizing:border-box}body{margin:0}header{padding:20px 28px;background:#142d4b;color:white;display:flex;align-items:center;justify-content:space-between}h1{font-size:21px;margin:0;font-weight:600}header small{color:#b6c8dc}main{max-width:1320px;margin:auto;padding:22px;display:grid;grid-template-columns:minmax(320px,1.2fr) minmax(250px,0.8fr);gap:20px}.panel{background:white;border:1px solid #d5dde5;border-radius:8px;padding:20px}.board-panel{padding:12px}canvas{display:block;width:100%;height:auto}#board{background:#efd1a3;border-radius:4px}h2{font-size:16px;margin:0 0 14px;font-weight:600}#message{font-size:16px;line-height:1.6;margin:0 0 12px}#move{font-size:54px;font-weight:650;letter-spacing:1px;line-height:1.1;color:#163c69;min-height:60px}#move-detail{min-height:24px;margin:12px 0 18px;color:#546477;line-height:1.5}.stats{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px 0;border-top:1px solid #e0e5eb}.stats label{display:block;color:#68798a;font-size:12px;margin-bottom:4px}.stats strong{font-weight:550}label.field{display:block;margin:12px 0;color:#4d6176}select{display:block;width:100%;margin-top:6px;background:white;color:#17263a;border:1px solid #c7d2de;border-radius:5px;padding:8px;font-size:14px}button{background:#163c69;color:white;border:1px solid #163c69;border-radius:5px;padding:9px 13px;font-size:14px;cursor:pointer}button.secondary{background:white;color:#163c69}.actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}.muted{color:#748498;font-size:12px;line-height:1.7}.legend{display:flex;justify-content:space-between;padding:10px 8px 0;color:#6b7d90;font-size:12px}#source{padding:5px 9px;background:#28425f;border-radius:4px;font-size:12px}details{margin-top:16px}summary{cursor:pointer;color:#36516d}#screen{margin-top:12px;background:#edf1f5;cursor:crosshair;max-height:620px;max-width:100%;width:auto}#calibration-help{margin:8px 0;font-size:13px;color:#5d7286}#error{color:#ad3b32;font-size:13px;margin-top:10px}#pv{font-size:13px;line-height:1.8;color:#63758a;overflow-wrap:anywhere}@media(max-width:740px){main{grid-template-columns:1fr;padding:12px}.panel{padding:16px}header{padding:16px}#move{font-size:44px}}
+</style>
+<header><div><h1>五子棋建议</h1><small>腾讯五子棋 · 电脑本地计算</small></div><span id="source">等待取屏</span></header>
+<main>
+ <section class="panel board-panel"><canvas id="board" width="700" height="700"></canvas><div class="legend"><span>坐标与腾讯棋盘一致，行号从下往上增加</span><span>蓝圈为建议落点</span></div><div class="legend"><span>黄十字：黑棋上一手</span><span>红十字：白棋上一手</span></div></section>
+ <section class="panel">
+  <h2>下一手</h2><p id="message">等待 iPhone USB 屏幕</p><div id="move">—</div><div id="move-detail"></div><div id="pv"></div><p class="muted" id="search-detail"></p>
+  <div class="stats"><div><label>棋子数量</label><strong id="counts">—</strong></div><div><label>格子识别</label><strong id="recognition">—</strong></div><div><label>本次建议刷新</label><strong id="update-time">—</strong></div><div><label>画面时间</label><strong id="frame-time">—</strong></div></div>
+  <label class="field">我执<select id="my_color"><option value="2">白棋</option><option value="1">黑棋</option><option value="0">双方分析</option></select></label>
+  <label class="field">规则<select id="rule"><option value="unknown">规则待确认</option><option value="freestyle">无禁手，五颗及以上连线获胜</option><option value="renju">有禁手，连珠规则</option><option value="standard">无禁手，恰好五连获胜</option></select></label>
+  <label class="field">计算时间<select id="budget_ms"><option value="250">250 毫秒</option><option value="500">500 毫秒</option><option value="1000">1 秒</option><option value="2000">2 秒</option><option value="5000">5 秒</option><option value="10000">10 秒 · 深算</option><option value="20000">20 秒 · 深算</option><option value="30000">30 秒 · 深算</option></select></label>
+  <div class="actions"><button id="pause">暂停分析</button><button class="secondary" id="reset">重新定位棋盘</button><button class="secondary" id="stop">停止程序</button></div>
+  <p id="error"></p>
+  <details><summary>手机原画面与棋盘校准</summary><p id="calibration-help">自动定位失败时，点“手动校准”，再依次点棋盘左上和右下的交叉点。</p><div class="actions"><button class="secondary" id="calibrate">手动校准</button><select id="size" style="width:auto;margin:0"><option value="15">15 路</option><option value="19">19 路</option></select></div><canvas id="screen" width="1" height="1"></canvas></details>
+  <p class="muted">深算时先显示参考建议，计算结束后显示最终建议。棋盘变化或取屏中断时会清空建议并停止旧计算。时间较长通常能搜索更深，请按对局剩余时间选择。</p>
+ </section>
+</main>
+<script>
+const $=id=>document.getElementById(id), ctx=$('board').getContext('2d'), phone=$('screen').getContext('2d');
+let state=null, frameId=null, screenImage=null, calibration=null, pendingFrame=false;
+function coord(p){return String.fromCharCode(65+p[0])+((state?.settings?.size||15)-p[1])}
+function drawBoard(){
+ const n=state?.settings?.size||15, step=600/(n-1), offset=50;
+ ctx.clearRect(0,0,700,700);ctx.fillStyle='#efd1a3';ctx.fillRect(0,0,700,700);
+ ctx.strokeStyle='#a9875e';ctx.lineWidth=1;
+ for(let i=0;i<n;i++){let p=offset+i*step;ctx.beginPath();ctx.moveTo(offset,p);ctx.lineTo(650,p);ctx.moveTo(p,offset);ctx.lineTo(p,650);ctx.stroke();ctx.fillStyle='#796344';ctx.font='13px -apple-system';ctx.textAlign='center';ctx.fillText(String.fromCharCode(65+i),p,26);ctx.fillText(n-i,25,p+4)}
+ let stars=n===15?[3,7,11]:[3,9,15];for(let y of stars)for(let x of stars){if(x!==stars[1]&&y===stars[1]||x===stars[1]&&y!==stars[1])continue;ctx.beginPath();ctx.arc(offset+x*step,offset+y*step,3,0,Math.PI*2);ctx.fill()}
+ if(state?.board)for(let y=0;y<n;y++)for(let x=0;x<n;x++){let c=state.board[y][x];if(!c)continue;let px=offset+x*step,py=offset+y*step;ctx.beginPath();ctx.arc(px,py,step*.40,0,Math.PI*2);ctx.fillStyle=c===1?'#212832':c===2?'#fcfcfc':'#ce7158';ctx.fill();ctx.strokeStyle=c===1?'#121923':c===2?'#c7ccd0':'#ad3b32';ctx.stroke();if(c===-1){ctx.fillStyle='white';ctx.font='16px -apple-system';ctx.fillText('?',px,py+5)}}
+ if(state?.last_moves)for(let name of ['red','yellow'])for(let [x,y] of state.last_moves[name]||[]){let px=offset+x*step,py=offset+y*step;ctx.strokeStyle=name==='red'?'#e4493d':'#eddc54';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(px-step*.17,py);ctx.lineTo(px+step*.17,py);ctx.moveTo(px,py-step*.17);ctx.lineTo(px,py+step*.17);ctx.stroke()}
+ if(['ready','deepening'].includes(state?.status)&&state.suggestion){let [x,y]=state.suggestion.move,px=offset+x*step,py=offset+y*step;ctx.beginPath();ctx.arc(px,py,step*.35,0,Math.PI*2);ctx.strokeStyle='#174d8a';ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='#174d8a';ctx.font='bold 15px -apple-system';ctx.fillText('1',px,py+5)}
+}
+function drawPhone(){
+ if(!screenImage)return;let c=$('screen');c.width=screenImage.naturalWidth;c.height=screenImage.naturalHeight;phone.drawImage(screenImage,0,0);
+ let g=state?.grid;if(g){phone.strokeStyle='#43a5f5';phone.lineWidth=4;phone.strokeRect(g.x0,g.y0,g.x1-g.x0,g.y1-g.y0)}
+ if(calibration?.first){let [x,y]=calibration.first;phone.strokeStyle='#da5040';phone.lineWidth=6;phone.beginPath();phone.arc(x,y,15,0,Math.PI*2);phone.stroke()}
+}
+function render(s){
+ state=s;$('message').textContent=s.message;$('source').textContent=s.source==='offline_image'?'截图回放':s.frame_age_ms!==null&&s.frame_age_ms<2000?'USB 实时画面':'等待 USB 屏幕';
+ for(let key of ['rule','my_color','budget_ms','size'])if(document.activeElement!==$(key))$(key).value=s.settings[key];
+ $('pause').textContent=s.settings.paused?'继续分析':'暂停分析';
+ const p=s.position;$('counts').textContent=p?`黑 ${p.black} / 白 ${p.white}`:'—';
+ $('recognition').textContent=s.recognition_ms!==undefined&&s.board?`${s.recognition_ms} ms`:'—';
+ $('frame-time').textContent=s.captured_at?new Date(s.captured_at*1000).toLocaleTimeString('zh-CN',{hour12:false}):s.source==='offline_image'?'截图回放':'—';
+ const a=['ready','deepening'].includes(s.status)?s.suggestion:null;$('move').textContent=a?a.coordinate:'—';$('update-time').textContent=a?`${Math.round(a.update_ms)} ms`:'—';
+ $('move-detail').textContent=a?`${a.turn===1?'黑棋':'白棋'}：从左第 ${a.move[0]+1} 列，从上第 ${a.move[1]+1} 行`:(p?.turn?`当前轮到${p.turn===1?'黑棋':'白棋'}`:'');
+ $('pv').textContent=a?.pv?.length>1?'参考续着：'+a.pv.map(coord).join(' → '):'';drawBoard();
+ $('search-detail').textContent=a?`${a.final?'已完成':'搜索中'} · ${a.depth!==null?'深度 '+a.depth+' 层 · ':''}${a.nodes!==null?(a.nodes/10000).toFixed(1)+' 万节点 · ':''}${((a.search_ms||0)/1000).toFixed(1)} 秒`:'';
+ if(s.frame_id&&s.frame_id!==frameId&&!pendingFrame&&!calibration){pendingFrame=true;let im=new Image();im.onload=()=>{screenImage=im;frameId=s.frame_id;pendingFrame=false;drawPhone()};im.onerror=()=>pendingFrame=false;im.src='/frame.jpg?t='+encodeURIComponent(s.frame_id)}
+}
+async function post(path,values){$('error').textContent='';try{let r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)}),s=await r.json();if(!r.ok)throw Error(s.error);render(s);return s}catch(e){$('error').textContent=e.message;return null}}
+for(let key of ['rule','my_color','budget_ms','size'])$(key).onchange=()=>post('/api/settings',{[key]:key==='rule'?$(key).value:Number($(key).value)});
+$('pause').onclick=()=>post('/api/settings',{paused:!state.settings.paused});$('reset').onclick=()=>post('/api/reset-grid',{});
+$('stop').onclick=()=>post('/api/stop',{});
+$('calibrate').onclick=()=>{calibration={first:null};$('calibration-help').textContent='先点棋盘左上角的交叉点';drawPhone()};
+$('screen').onclick=async e=>{if(!calibration)return;let c=$('screen'),r=c.getBoundingClientRect(),x=(e.clientX-r.left)*c.width/r.width,y=(e.clientY-r.top)*c.height/r.height;if(!calibration.first){calibration.first=[x,y];$('calibration-help').textContent='再点棋盘右下角的交叉点';drawPhone();return}let [x0,y0]=calibration.first;calibration=null;let s=await post('/api/calibrate',{x0,y0,x1:x,y1:y});$('calibration-help').textContent=s?'校准完成':'校准失败，请检查选中的交叉点';frameId=null};
+async function poll(){try{let r=await fetch('/api/state');if(!r.ok)throw Error();render(await r.json())}catch{$('message').textContent='本地程序已停止';$('source').textContent='取屏已停止';$('move').textContent='—';$('move-detail').textContent='';$('pv').textContent='';$('search-detail').textContent='';$('counts').textContent='—';$('recognition').textContent='—';$('update-time').textContent='—';if(state){state.status='capture_stopped';state.suggestion=null;state.board=null;state.position=null;state.last_moves=null}drawBoard()}finally{setTimeout(poll,200)}}
+drawBoard();poll();
+</script>
+</html>

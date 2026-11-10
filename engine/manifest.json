@@ -1,0 +1,25 @@
+{
+  "source_url": "https://github.com/dhbloo/rapfi",
+  "source_commit": "3c94c2a976f24a0dd1c5517623e9ab6fffe66bd7",
+  "networks_url": "https://github.com/dhbloo/rapfi-networks",
+  "networks_commit": "e32ad77a5364363b3e3a02b3f9e8610ade19ea98",
+  "cmake_options": [
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DNO_COMMAND_MODULES=ON",
+    "-DUSE_AVX512=OFF",
+    "-DUSE_VNNI=OFF",
+    "-DENABLE_LTO=OFF"
+  ],
+  "sha256": {
+    "mix9svqstandard_bs15.bin.lz4": "84334f5db96f45b3e36ebdde06d2259d878ae1eb347b7cf74574ac908b8d9e7d",
+    "model210901.bin": "34061bca4031a786a4b0ff52470fa9f316013c4c2239db0d70581a3c35d0a72a",
+    "mix9svqrenju_bs15_white.bin.lz4": "a31f318518d3b5630489054d9eb013fd5353c553999640c2bcfd8d95e6fe4e4e",
+    "GPL-3.0.txt": "6bab265559d5ebe9f259f2f54e9640bb4c8c8535bacd37c18125231f6fa9acf7",
+    "mix9svqrenju_bs15_black.bin.lz4": "7ab8c974c30da07717ce6a504616a62ac8c981500503f0ced0fadefd3f46c5ec",
+    "mix9svqfreestyle_bsmix.bin.lz4": "6bc0d1b0ff8e1d857f7f412923cd458f38f1a435087c91ae71fec3676c23ef62",
+    "rapfi-source.tar.gz": "0a16c5510287c57aa57e03ccaed1ad181d731755283a7acfca1300983f0fbea9",
+    "pbrain-rapfi": "e9d612f951122136d63919e295203009da10a2785d8ce40a29bacc777af7ec22",
+    "config.toml": "32b9180c91247541d399ceef62906d5ffeb48e34eb5f261612987633820d5d3c",
+    "NETWORKS-CC0.txt": "084bc2aebf95358b73255bd38213fdb27bfd19c6819ae7c1d0679400cf01cea1"
+  }
+}
