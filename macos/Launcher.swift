@@ -67,7 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     @objc private func about() {
         NSApp.orderFrontStandardAboutPanel(options: [
-            .applicationName: "五子棋助手", .applicationVersion: "1.1",
+            .applicationName: "五子棋助手", .applicationVersion: "1.2.0",
             .credits: NSAttributedString(string: "腾讯五子棋 USB 屏幕识别与 Rapfi 下一手建议\nRapfi：GPL-3.0，官方权重：CC0\n许可及源代码随 App 资源附带。")
         ])
     }

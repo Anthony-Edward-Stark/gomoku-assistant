@@ -7,17 +7,21 @@ import signal
 import subprocess
 import threading
 import time
+import sys
+import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
 import cv2
 import numpy as np
+from browser_capture import BrowserCapture, WINDOW_SOURCE, handle_capture
 from engine import AnalysisCancelled, BUDGETS, DEFAULT_BUDGET, Engine, RULES
 from vision import Grid, detect_grid, read_board, read_marks, validate_position
 
 ROOT = Path(__file__).resolve().parent
 MESSAGES = {
+    "waiting_window": "请选择 iPhone 投屏窗口",
     "waiting_capture": "等待 iPhone USB 屏幕",
     "capture_stopped": "取屏已停止，建议已清空",
     "stale": "画面已过期，建议已清空",
@@ -40,22 +44,24 @@ MESSAGES = {
 
 def atomic_json(path, data):
     temp = path.with_suffix(".tmp")
-    temp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+    temp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     temp.replace(path)
 
 
 class Observer:
-    def __init__(self, session, rule=None, image=None):
+    def __init__(self, session, rule=None, image=None, browser_capture=False):
         self.session = Path(session)
         self.session.mkdir(parents=True, exist_ok=True)
         self.image = Path(image) if image else None
+        self.browser_capture = BrowserCapture() if browser_capture and not image else None
+        self.input_source = "offline_image" if image else WINDOW_SOURCE if self.browser_capture else "live_usb_screen"
         self.lock = threading.RLock()
         self.stop = threading.Event()
         self.engine = Engine()
         self.engine_lock = threading.Lock()
         self.settings = {"rule": rule or "freestyle", "size": 15, "budget_ms": DEFAULT_BUDGET, "my_color": 2, "paused": False}
         try:
-            saved = json.loads((self.session / "settings.json").read_text())
+            saved = json.loads((self.session / "settings.json").read_text(encoding="utf-8"))
             for key, allowed in (("budget_ms", BUDGETS), ("size", (15, 19)),
                                  ("my_color", (0, 1, 2)), ("rule", (*RULES, "unknown"))):
                 if saved.get(key) in allowed:
@@ -67,7 +73,7 @@ class Observer:
         self.grid = None
         self.manual_grid = None
         self.frame = b""
-        self.state = {"status": "waiting_capture", "source": "offline_image" if image else "live_usb_screen",
+        self.state = {"status": "waiting_window" if self.browser_capture else "waiting_capture", "source": self.input_source,
                       "board": None, "suggestion": None, "captured_at": None, "frame_id": None}
         self.generation = 0
         self.board_key = None
@@ -81,6 +87,7 @@ class Observer:
     def snapshot(self):
         with self.lock:
             state = copy.deepcopy(self.state)
+            state["browser_capture"] = bool(self.browser_capture)
             state["settings"] = dict(self.settings)
             state["grid"] = self.grid.to_dict() if self.grid else None
             captured_at = state.get("captured_at")
@@ -158,13 +165,28 @@ class Observer:
             self.last_frame_token = None
             return self.snapshot()
 
+    def reset_window_input(self, status, new_window=False):
+        if new_window:
+            self.grid = self.manual_grid = None
+            self.detect_at = 0
+        self.frame = b""
+        self.last_frame_token = None
+        self.state.update(captured_at=None, frame_id=None)
+        self.invalidate(status)
+
     def _load(self):
+        if self.browser_capture:
+            with self.lock:
+                loaded, status = self.browser_capture.load(self.last_frame_token)
+                if status:
+                    self.reset_window_input(status)
+                return loaded
         if self.image:
             data = self.image.read_bytes()
             token = (self.image.stat().st_mtime_ns, self.generation)
             return data, {"captured_at": None, "frame_id": str(token), "status": "offline"}, token
         try:
-            first = json.loads((self.session / "capture.json").read_text())
+            first = json.loads((self.session / "capture.json").read_text(encoding="utf-8"))
             if first.get("status") != "capturing":
                 self.invalidate("waiting_capture")
                 return None
@@ -176,7 +198,7 @@ class Observer:
             if token == self.last_frame_token:
                 return None
             data = (self.session / "latest.jpg").read_bytes()
-            after = json.loads((self.session / "capture.json").read_text())
+            after = json.loads((self.session / "capture.json").read_text(encoding="utf-8"))
             if after != first:
                 return None  # Never pair an old timestamp with a newly replaced image.
             first["frame_id"] = f"{date:.6f}:{first['sequence']}"
@@ -189,6 +211,8 @@ class Observer:
         started = time.perf_counter()
         h, w = image.shape[:2]
         with self.lock:
+            if self.browser_capture and not self.browser_capture.owns(metadata.get("capture_token")):
+                return
             self.frame = raw
             self.state.update({k: metadata.get(k) for k in ("captured_at", "frame_id")})
             self.state.update(width=w, height=h)
@@ -264,7 +288,8 @@ class Observer:
             suggestion["computed_at"] = time.time()
             suggestion["generation"] = generation
             self.state.update(status="ready" if final else "deepening", suggestion=suggestion, error=None)
-            atomic_json(self.session / "latest-state.json", self.snapshot())
+            if not self.browser_capture:
+                atomic_json(self.session / "latest-state.json", self.snapshot())
 
     def _analyse(self, matrix, settings, generation, cancel):
         try:
@@ -274,9 +299,9 @@ class Observer:
             with self.lock:
                 if generation != self.generation or self.stop.is_set() or cancel.is_set():
                     return
-                if self.state["status"] != "ready":
+                if self.browser_capture or self.state["status"] != "ready":
                     return
-                with (self.session / "latency.jsonl").open("a") as handle:
+                with (self.session / "latency.jsonl").open("a", encoding="utf-8") as handle:
                     handle.write(json.dumps({"source": self.state["source"], "captured_at": self.state.get("captured_at"),
                         "black": self.state["position"]["black"], "white": self.state["position"]["white"],
                         "recognition_ms": self.state["recognition_ms"], **suggestion}) + "\n")
@@ -284,9 +309,10 @@ class Observer:
             pass
         except Exception as error:
             with self.lock:
-                with (self.session / "analysis-errors.jsonl").open("a") as handle:
-                    handle.write(json.dumps({"time": time.time(), "generation": generation,
-                        "error": str(error), "board": matrix}, ensure_ascii=False) + "\n")
+                if not self.browser_capture:
+                    with (self.session / "analysis-errors.jsonl").open("a", encoding="utf-8") as handle:
+                        handle.write(json.dumps({"time": time.time(), "generation": generation,
+                            "error": str(error), "board": matrix}, ensure_ascii=False) + "\n")
                 if generation == self.generation:
                     self.state.update(status="error", error=str(error), suggestion=None)
         finally:
@@ -319,7 +345,7 @@ class Observer:
             with self.lock:
                 current = self.snapshot()
                 key = (current["status"], current.get("frame_id"), self.generation, current.get("error"))
-                if key != last_written:
+                if not self.browser_capture and key != last_written:
                     atomic_json(self.session / "latest-state.json", current)
                     last_written = key
             self.stop.wait(0.04 if not self.image else 0.2)
@@ -327,7 +353,8 @@ class Observer:
             self.search_cancel.set()
         self.engine.close()
         self.invalidate("capture_stopped")
-        atomic_json(self.session / "latest-state.json", self.snapshot())
+        if not self.browser_capture:
+            atomic_json(self.session / "latest-state.json", self.snapshot())
 
 
 def serve(observer, port):
@@ -351,7 +378,10 @@ def serve(observer, port):
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
-            self.wfile.write(data)
+            try:
+                self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
         def do_GET(self):
             if not self.allowed():
@@ -360,7 +390,10 @@ def serve(observer, port):
             path = urlparse(self.path).path
             if path == "/":
                 self.send(200, (ROOT / "index.html").read_bytes(), "text/html; charset=utf-8")
+            elif path == "/browser_capture.js":
+                self.send(200, (ROOT / "browser_capture.js").read_bytes(), "text/javascript; charset=utf-8")
             elif path == "/api/state":
+                observer.ui_seen = time.monotonic()
                 self.send(200, observer.snapshot())
             elif path == "/frame.jpg":
                 with observer.lock:
@@ -373,6 +406,9 @@ def serve(observer, port):
             if not self.allowed():
                 self.send(403, {"error": "不允许跨站访问"})
                 return
+            path = urlparse(self.path).path
+            if handle_capture(self, observer, path):
+                return
             try:
                 count = int(self.headers.get("Content-Length", "0"))
                 if not 0 < count <= 16384 or not self.headers.get("Content-Type", "").startswith("application/json"):
@@ -380,7 +416,6 @@ def serve(observer, port):
                 values = json.loads(self.rfile.read(count))
                 if not isinstance(values, dict):
                     raise ValueError("请求格式错误")
-                path = urlparse(self.path).path
                 if path == "/api/settings":
                     state = observer.configure(values)
                 elif path == "/api/calibrate":
@@ -402,8 +437,13 @@ def serve(observer, port):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--session", default=str(ROOT / ".runtime"))
+    windows = os.name == "nt"
+    default_dir = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData/Local")) / "GomokuAssistant" if windows else ROOT / ".runtime"
+    parser.add_argument("--browser-capture", action=argparse.BooleanOptionalAction, default=windows)
+    parser.add_argument("--open-browser", action=argparse.BooleanOptionalAction, default=windows and getattr(sys, "frozen", False))
+    parser.add_argument("--ready-file", type=Path)
+    parser.add_argument("--port", type=int, default=0 if windows else 8765)
+    parser.add_argument("--session", default=str(default_dir))
     parser.add_argument("--rule", choices=[*RULES, "unknown"])
     parser.add_argument("--image")
     parser.add_argument("--device")
@@ -411,31 +451,40 @@ def main():
     parser.add_argument("--duration", type=float, default=86400)
     parser.add_argument("--parent-pid", type=int)
     args = parser.parse_args()
-    observer = Observer(args.session, args.rule, args.image)
+    observer = Observer(args.session, args.rule, args.image, browser_capture=args.browser_capture)
     if args.my_color is not None:
         observer.settings["my_color"] = args.my_color
     server = serve(observer, args.port)
     capture = None
     capture_log = None
-    if not args.image:
-        capture_log = (observer.session / "capture.log").open("a")
+    if not args.image and not observer.browser_capture:
+        capture_log = (observer.session / "capture.log").open("a", encoding="utf-8")
         cmd = [str(ROOT / "bin/phone-capture"), "--output", str(observer.session),
                "--duration", str(args.duration)]
         if args.device:
             cmd += ["--device", args.device]
         capture = subprocess.Popen(cmd, stdout=capture_log, stderr=subprocess.STDOUT)
+    observer.ui_seen = time.monotonic()
     worker = threading.Thread(target=observer.run, daemon=True)
     worker.start()
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    print(json.dumps({"url": f"http://127.0.0.1:{server.server_port}", "source": observer.state["source"],
-                      "backend_pid": os.getpid(), "capture_pid": capture.pid if capture else None}), flush=True)
+    ready = {"url": f"http://127.0.0.1:{server.server_port}", "source": observer.state["source"],
+             "backend_pid": os.getpid(), "capture_pid": capture.pid if capture else None}
+    if args.ready_file:
+        atomic_json(args.ready_file, ready)
+    if sys.stdout is not None:
+        print(json.dumps(ready), flush=True)
+    if args.open_browser:
+        webbrowser.open(ready["url"])
     for signum in (signal.SIGINT, signal.SIGTERM):
         signal.signal(signum, lambda *_: observer.stop.set())
     try:
         deadline = time.monotonic() + args.duration
         while not observer.stop.wait(min(1, max(0, deadline-time.monotonic()))):
             if time.monotonic() >= deadline or (args.parent_pid and os.getppid() != args.parent_pid):
+                break
+            if args.open_browser and time.monotonic() - observer.ui_seen > 120:
                 break
     finally:
         observer.stop.set()

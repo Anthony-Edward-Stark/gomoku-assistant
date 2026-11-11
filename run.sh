@@ -13,6 +13,6 @@ if [[ ! -x "$task_env/bin/python" ]] || ! "$task_env/bin/python" -c 'import cv2,
 fi
 mkdir -p "$task_dir/bin"
 if [[ ! -x "$task_dir/bin/phone-capture" || "$task_dir/capture.swift" -nt "$task_dir/bin/phone-capture" ]]; then
-  /usr/bin/swiftc -O -target x86_64-apple-macosx14.0 "$task_dir/capture.swift" -o "$task_dir/bin/phone-capture"
+  /usr/bin/swiftc -O -target "$(/usr/bin/uname -m)-apple-macosx14.0" "$task_dir/capture.swift" -o "$task_dir/bin/phone-capture"
 fi
 exec "$task_env/bin/python" "$task_dir/app.py" "$@"

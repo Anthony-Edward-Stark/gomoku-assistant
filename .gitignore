@@ -19,3 +19,5 @@ capture.json
 settings.json
 .env
 .env.*
+
+/release/

@@ -20,7 +20,7 @@ class AnalysisCancelled(Exception):
 
 class Engine:
     def __init__(self, directory=None):
-        self.directory = Path(directory or Path(__file__).parent / "engine")
+        self.directory = Path(directory or os.environ.get("ASSISTANT_ENGINE_DIR") or Path(__file__).parent / "engine").resolve()
         self.process = None
         self.lines = queue.Queue()
         self.lock = threading.Lock()
@@ -30,9 +30,11 @@ class Engine:
         if self.process and self.process.poll() is None:
             return
         self.lines = queue.Queue()
-        self.process = subprocess.Popen([str(self.directory / "pbrain-rapfi")],
+        executable = "pbrain-rapfi.exe" if os.name == "nt" else "pbrain-rapfi"
+        self.process = subprocess.Popen([str(self.directory / executable)],
             cwd=self.directory, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, text=True, bufsize=1)
+            stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", bufsize=1,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         process, lines = self.process, self.lines
 
         def receive():

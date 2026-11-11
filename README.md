@@ -1,29 +1,38 @@
 # 五子棋助手
 
-在 Mac 上读取 USB 连接的 iPhone 画面，识别 15 路五子棋棋盘，由 [Rapfi](https://github.com/dotb1ue/rapfi) 在本机计算落点。已验证腾讯五子棋的竖屏木质棋盘。适合练习、复盘和允许使用辅助工具的对局，程序不会向手机发送点击。
+读取 iPhone 的 USB 或投屏窗口画面，识别 15 路五子棋棋盘，由 [Rapfi](https://github.com/dotb1ue/rapfi) 在本机计算落点。已验证腾讯五子棋的竖屏木质棋盘。适合练习、复盘和允许使用辅助工具的对局，程序不会向手机发送点击。
 
 ## 安装与使用
 
-1. 从 [Releases](https://github.com/Anthony-Edward-Stark/gomoku-assistant/releases/latest) 下载 `GomokuAssistant-macOS-Intel.zip`，解压后打开“五子棋助手.app”。支持有 AVX2/BMI2 的 Intel Mac，最低 macOS 14。
-2. 用 USB 连接 iPhone，保持解锁。首次连接时在手机上确认“信任此电脑”，再打开棋盘。
-3. 选择执子颜色、规则和计算时间。蓝圈标出建议落点；计算期间建议会持续更新。
+从 [Releases](https://github.com/Anthony-Edward-Stark/gomoku-assistant/releases/latest) 按设备下载：
 
-1.1 版支持 250 毫秒至 30 秒共八档，默认 2 秒。棋盘变化时停止旧计算。支持无禁手、恰好五连及连珠禁手。识别不清或取屏超时会清空建议，可以用“重新定位棋盘”或手动定位恢复。其他棋盘皮肤与横屏未验证。
+| 平台 | 安装包 |
+| --- | --- |
+| Apple 芯片 Mac，macOS 14+ | `GomokuAssistant-macOS-AppleSilicon.zip` |
+| Intel Mac，macOS 14+（AVX2/BMI2） | `GomokuAssistant-macOS-Intel.zip` |
+| Windows x64 | `GomokuAssistant-Windows-x64.zip` |
 
-安装包内置 Python、OpenCV、取屏程序和 Rapfi。App 为 ad-hoc 签名，未经过 Apple 公证。设置和取屏数据保存在本机 `~/Library/Application Support/GomokuAssistant/`，不会发送到网络。
+**macOS：**解压 ZIP 后打开 App。 USB 连接 iPhone，保持解锁并确认“信任此电脑”，然后显示棋盘。App 为 ad-hoc 签名，未经过 Apple 公证。
 
-## 从源码运行或构建
+**Windows：**解压整个 ZIP，再双击 `GomokuAssistant.exe`。先在电脑上打开 iPhone 投屏窗口（例如已有的 AirPlay 接收器或采集卡预览），然后用 Edge 或 Chrome 打开助手本地页面，点击“选择投屏窗口”，在浏览器中选该窗口。Windows 版不提供 iPhone USB 直连取屏。结束时可点击“停止程序”。Windows 可执行文件未进行商业签名。
 
-在符合上述条件的 Intel Mac 上安装 Python 3.12 和 Xcode Command Line Tools。`./run.sh` 会创建本地虚拟环境、安装 `requirements.txt` 中的依赖并编译取屏程序。默认窗口地址为 `http://127.0.0.1:8765/`，运行数据保存在仓库的 `.runtime/`。
+计算档位为 250 毫秒至 30 秒，默认 2 秒。支持无禁手、恰好五连及连珠禁手。识别不清或取屏超时会清空建议，可重新定位棋盘或手动定位。
+
+安装包内置 Python、OpenCV 和引擎。取屏与分析在本机运行。Windows 的共享画面只保留在内存。当前识别以清晰、正向棋盘为准，换皮肤或横屏需要重新校准。
+
+## 从源码构建
+
+使用对应架构的 Python 3.12。macOS 需要 Xcode Command Line Tools；Apple 芯片版的 Rapfi 需要 CMake。Windows 构建需要 7-Zip（象棋），或 CMake 和 Visual Studio 2022 的 ClangCL x64 工具链（五子棋）。
 
 ```sh
-python3.12 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt pyinstaller==6.22.3
-.venv/bin/python verify.py
-.venv/bin/python build_app.py
+python -m pip install -r requirements.txt pyinstaller==6.22.3
+python prepare_engine.py
+python build_app.py
+python verify_packaged.py
+python pack_release.py
 ```
 
-构建产物为 `dist/五子棋助手.app`。离线回放可用 `./run.sh --image /path/to/board.jpg`。回归脚本默认运行引擎和状态检查；完整的截图识别与搜索基准需要有标注的原始样本，个人采集画面未随仓库发布。
+产物位于 `release/`。`prepare_engine.py` 校验并准备该平台引擎；象棋的官方权重仅用作本地验证，不会打入安装包。Mac Intel 源码入口也可直接用 `./run.sh`，默认地址为 `http://127.0.0.1:8765/`。真实手机截图不会随仓库发布。
 
 ## 许可
 
