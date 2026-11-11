@@ -76,6 +76,22 @@ class Engine:
                 return line, seen
         raise TimeoutError("Rapfi 响应超时：" + "; ".join(seen[-4:]))
 
+    def _wait_idle(self, cancel):
+        # Rapfi prints the final move before clearing its thinking flag. It may
+        # discard the first token of START <size> if the caller sends it at once.
+        # ABOUT has no argument, so it is safe to retry until the parser answers.
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            if cancel is not None and cancel.is_set():
+                raise AnalysisCancelled()
+            self._send("ABOUT")
+            try:
+                self._until(lambda line: line.startswith('name="Rapfi"'), .15)
+                return
+            except TimeoutError:
+                continue
+        raise TimeoutError("Rapfi 未确认上一手计算已经结束")
+
     def analyse(self, board, rule, budget_ms=DEFAULT_BUDGET, *, progress=None, cancel=None,
                 threads=DEFAULT_THREADS, memory_mb=DEFAULT_MEMORY_MB):
         if rule not in RULES:
@@ -106,6 +122,8 @@ class Engine:
             start = time.monotonic()
             self._start()
             try:
+                if self.ready:
+                    self._wait_idle(cancel)
                 self._send(f"START {size}")
                 _, startup = self._until(lambda line: line == "OK", 8)
                 self.ready = True

@@ -1,0 +1,2 @@
+# The engine manifest verifies the exact distributed bytes.
+/engine/** -text
