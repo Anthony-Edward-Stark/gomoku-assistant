@@ -23,6 +23,19 @@ def run(*args):
     subprocess.run(list(map(str, args)), check=True)
 
 
+def visual_studio_generator():
+    default = Path(os.environ.get('ProgramFiles(x86)', 'C:/Program Files (x86)'))
+    vswhere = shutil.which('vswhere') or default / 'Microsoft Visual Studio/Installer/vswhere.exe'
+    installed = subprocess.check_output([str(vswhere), '-latest', '-products', '*',
+        '-requires', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+        '-property', 'installationVersion'], text=True).strip()
+    generators = {'17': 'Visual Studio 17 2022', '18': 'Visual Studio 18 2026'}
+    major = installed.split('.', 1)[0]
+    if major not in generators:
+        raise RuntimeError('Install the x64 C++ and ClangCL tools for Visual Studio 2022 or 2026')
+    return generators[major]
+
+
 def network_archive(settings, cache, override):
     archive = override or cache / 'Pikafish.2026-09-06.7z'
     if override is None and not archive.exists():
@@ -106,7 +119,7 @@ def main():
                     '-DUSE_SSE=ON' if win else '-DUSE_SSE=OFF',
                     '-DUSE_NEON=OFF' if win else '-DUSE_NEON=ON', '-DUSE_NEON_DOTPROD=OFF']
             if win:
-                opts += ['-G', 'Visual Studio 17 2022', '-A', 'x64', '-T', 'ClangCL']
+                opts += ['-G', visual_studio_generator(), '-A', 'x64', '-T', 'ClangCL']
             else:
                 opts += ['-DCMAKE_OSX_ARCHITECTURES=arm64', '-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0']
             run('cmake', '-S', src, '-B', build, *opts)

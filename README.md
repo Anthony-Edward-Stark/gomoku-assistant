@@ -22,7 +22,7 @@
 
 ## 从源码构建
 
-使用对应架构的 Python 3.12。macOS 需要 Xcode Command Line Tools；Apple 芯片版的 Rapfi 需要 CMake。Windows 构建需要 7-Zip（象棋），或 CMake 和 Visual Studio 2022 的 ClangCL x64 工具链（五子棋）。
+使用对应架构的 Python 3.12。macOS 需要 Xcode Command Line Tools；Apple 芯片版的 Rapfi 需要 CMake。Windows 构建需要 CMake 和 Visual Studio 2022 或 2026 的 ClangCL x64 工具链。
 
 ```sh
 python -m pip install -r requirements.txt pyinstaller==6.22.3
